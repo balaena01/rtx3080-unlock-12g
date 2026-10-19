@@ -1,0 +1,43 @@
+param([switch]$WithLocalFixtures)
+$ErrorActionPreference='Stop'
+$project=Split-Path $PSScriptRoot -Parent
+$logDir=Join-Path $PSScriptRoot 'build'
+New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+$jobs=@(
+ @{Name='probe';Kind='cmd';Path='test.cmd'},
+ @{Name='port';Kind='cmd';Path='unlock/test-port.cmd'},
+ @{Name='checks';Kind='cmd';Path='unlock/test-checks.cmd'},
+ @{Name='runtime';Kind='cmd';Path='unlock/test-runtime.cmd'},
+ @{Name='pe';Kind='python';Path='unlock/tests/test_pe.py'},
+ @{Name='usb-package';Kind='python';Path='tools/test_package_usb.py'}
+)
+if($WithLocalFixtures) {
+ $jobs+=@(
+  @{Name='transaction';Kind='cmd';Path='unlock/test-transaction.cmd'},
+  @{Name='sha';Kind='cmd';Path='unlock/test-sha.cmd'},
+  @{Name='efi-transaction';Kind='cmd';Path='unlock/test-efi-transaction.cmd'},
+  @{Name='app';Kind='cmd';Path='unlock/test-app.cmd'},
+  @{Name='fwsec-sequence';Kind='cmd';Path='unlock/test-fwsec-sequence.cmd'}
+ )
+}
+$results=@()
+foreach($job in $jobs) {
+ $log=Join-Path $logDir ($job.Name+'.log')
+ $code=1
+ try {
+  $ErrorActionPreference='Continue'
+  $path=Join-Path $project $job.Path
+  if($job.Kind -eq 'cmd') { & $path *> $log }
+  else { & python $path *> $log }
+  $code=$LASTEXITCODE
+ } catch { $_ | Out-String | Add-Content -LiteralPath $log }
+ finally { $ErrorActionPreference='Stop' }
+ $results += [ordered]@{Name=$job.Name;Command=$job.Path;ExitCode=$code;Log=($job.Name+'.log')}
+ Write-Output ($job.Name+': exit '+$code)
+ Get-Content -Tail 1 -LiteralPath $log
+}
+$passed=@($results | Where-Object {$_.ExitCode -ne 0}).Count -eq 0
+[ordered]@{AllPassed=$passed;HardwareAccess=$false;WithLocalFixtures=[bool]$WithLocalFixtures;Results=$results} |
+ ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $logDir 'test-results.json')
+if(-not $passed){throw 'One or more verification groups failed.'}
+Write-Output ('All '+$jobs.Count+' selected verification groups passed; hardware was simulated.')
