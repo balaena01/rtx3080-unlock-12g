@@ -195,8 +195,8 @@ static void reset(void) {
   memset(config, 0, sizeof(config));
   memset(&pci, 0, sizeof(pci)); memset(&bs, 0, sizeof(bs));
   memset(&result, 0, sizeof(result));
-  config[0] = 0x220610de; config[1] = 6; config[2] = 0x030000a1;
-  config[11] = 0x38901462;
+  config[0] = PROBE_TARGET_ID; config[1] = 6; config[2] = 0x030000a1;
+  config[11] = PROBE_TARGET_SUBSYSTEM;
   bar_size = 0x01000000; failed_offset = 0xffffffff;
   config_status = bar_status = EFI_SUCCESS; reads = writes = prom_reads = 0;
   pci.Pci.Read = read_config; pci.Pci.Write = write_config;
@@ -231,8 +231,8 @@ int main(void) {
   reset();
   CHECK(ProbeMatches(config));
   CHECK(ProbeCollect(&pci, &bs, &result) == EFI_SUCCESS);
-  CHECK(result.Config[11] == 0x38901462 && result.BarSize == 0x1000000);
-  CHECK(reads == 16 && writes == 0);
+  CHECK(result.Config[11] == PROBE_TARGET_SUBSYSTEM && result.BarSize == 0x1000000);
+  CHECK(reads == PROBE_SAMPLE_COUNT && writes == 0);
   CHECK(result.Samples[0].Value == 0x170000a1);
   CHECK(ProbeReadProm(&pci, &result, buf, sizeof(buf)) == EFI_SUCCESS);
   CHECK(buf[0] == 0x0000aa55 && buf[1023] == 0x44332211 && prom_reads == 4);
@@ -245,6 +245,11 @@ int main(void) {
   reset(); config[0] = 0x220d10de;
   CHECK(ProbeCollect(&pci, &bs, &result) == EFI_UNSUPPORTED && reads == 0);
   reset(); config[11] = 0x12341462;
+  CHECK(ProbeCollect(&pci, &bs, &result) == EFI_UNSUPPORTED && reads == 0);
+  /* The upstream 10GB card and board are not this target. */
+  reset(); config[0] = 0x220610de;
+  CHECK(ProbeCollect(&pci, &bs, &result) == EFI_UNSUPPORTED && reads == 0);
+  reset(); config[11] = 0x38901462;
   CHECK(ProbeCollect(&pci, &bs, &result) == EFI_UNSUPPORTED && reads == 0);
   reset(); config[2] = 0x04000000;
   CHECK(ProbeCollect(&pci, &bs, &result) == EFI_UNSUPPORTED && reads == 0);
@@ -269,7 +274,7 @@ int main(void) {
 
   reset(); failed_offset = 0x118128;
   CHECK(ProbeCollect(&pci, &bs, &result) == EFI_SUCCESS);
-  CHECK(result.Samples[1].Status == EFI_DEVICE_ERROR && reads == 16);
+  CHECK(result.Samples[1].Status == EFI_DEVICE_ERROR && reads == PROBE_SAMPLE_COUNT);
   failed_offset = PROBE_PROM_OFFSET + 1024; before = reads;
   CHECK(ProbeReadProm(&pci, &result, buf, sizeof(buf)) == EFI_DEVICE_ERROR);
   CHECK(reads == before + 2 && writes == 0);
@@ -280,7 +285,7 @@ int main(void) {
   CHECK(console_calls > 0 && stall_calls == 1 && reads == 0 && writes == 0);
   reset(); enumerate_target = TRUE;
   CHECK(efi_main((EFI_HANDLE)1, &system_table) == EFI_SUCCESS);
-  CHECK(reads == 16 && writes == 0 && prom_reads == 0);
+  CHECK(reads == PROBE_SAMPLE_COUNT && writes == 0 && prom_reads == 0);
   reset(); usb_output = enumerate_target = TRUE;
   buf[0] = 0x0000aa55; pci.RomImage = buf; pci.RomSize = sizeof(buf);
   CHECK(efi_main((EFI_HANDLE)1, &system_table) == EFI_SUCCESS);
@@ -288,6 +293,13 @@ int main(void) {
   CHECK(report_writes == 1 && prom_writes == 1 && rom_writes == 1);
   CHECK(file_writes == 3 && file_flushes == 3 && writes == 0 && prom_reads == 1024);
   CHECK(strstr(saved_report, "matching_cards=0x0000000000000001") != NULL);
+  /* An Intel display controller is recorded, never read through MMIO. */
+  reset(); usb_output = enumerate_target = TRUE; config[0] = 0x46808086; config[2] = 0x0300000c;
+  CHECK(efi_main((EFI_HANDLE)1, &system_table) == EFI_SUCCESS);
+  CHECK(reads == 0 && writes == 0 && prom_reads == 0 && report_writes == 1);
+  CHECK(strstr(saved_report, "[OTHER DISPLAY PCI]") != NULL);
+  CHECK(strstr(saved_report, "identity=0x0000000046808086") != NULL);
+  CHECK(strstr(saved_report, "matching_cards=0x0000000000000000") != NULL);
   reset(); usb_output = TRUE; occupied_slot = TRUE;
   CHECK(efi_main((EFI_HANDLE)1, &system_table) == EFI_SUCCESS);
   CHECK(run_creates == 1 && report_writes == 1);

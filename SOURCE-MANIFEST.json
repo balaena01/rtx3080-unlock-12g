@@ -50,6 +50,10 @@
       "sha256": "57b04fa8599ce298d58237246b4353e72000ce65d3d75bd406e97d1d26ec0fd2"
     },
     {
+      "path": "build-linux.sh",
+      "sha256": "88bfbbc57ae4918452d59bf8e96199a3eee3a13cc379843af72b8e6e34d267a5"
+    },
+    {
       "path": "deps/edk2/License.txt",
       "sha256": "50ce20c9cfdb0e19ee34fe0a51fc0afe961f743697b068359ab2f862b494df80"
     },
@@ -2631,15 +2635,15 @@
     },
     {
       "path": "probe_app.c",
-      "sha256": "5f05dcf72c2e855d205f4d30f362f36f78061725f5d579f2baa03ede4c2b9cb1"
+      "sha256": "db0f90566b756757de7ce213fd6ee9dbeb736586f2e1e489375dae752bd2ec5e"
     },
     {
       "path": "probe_core.c",
-      "sha256": "32ec620541cc52c2cba003b854aec8a27c94b0d3b12cf22a2350057a97a578d9"
+      "sha256": "366eb2185c1c9a1e2c7808d4357d977c2cbbe9c1ec50025276957cd38e015528"
     },
     {
       "path": "probe_core.h",
-      "sha256": "911b0c2a1d16fd978d6b2c99e62714d183d2c184b04eb9adc389409f0e83acfc"
+      "sha256": "f949626ec24af17bfc0dc20e15e26d920e2d1320c00401ea4e4fbd04b9afb6f3"
     },
     {
       "path": "results/benchmark.json",
@@ -2651,7 +2655,11 @@
     },
     {
       "path": "test_core.c",
-      "sha256": "cdf7216af3a923a578ec1545418bceb98081c598e74532910205a52a1b1551dd"
+      "sha256": "dbfd7216d8f4d62c0ee5c558a8792024ee0cd057eb1820d773ec578efd4397ab"
+    },
+    {
+      "path": "tools/check_efi.py",
+      "sha256": "13f97688a56a8ee99af1d8e4534eba6d3f7970d24180daaa05ca188b779047bf"
     },
     {
       "path": "tools/package_usb.py",
@@ -2660,6 +2668,10 @@
     {
       "path": "tools/source_manifest.py",
       "sha256": "ce875e837d5224b81a79d2586adb54cef1a474037754a551b500edc816a1efa4"
+    },
+    {
+      "path": "tools/test_check_efi.py",
+      "sha256": "55ba00ad5ba20ab71c63cfcf770e6c049427d78576b077e7eee0b1eeb5e09e61"
     },
     {
       "path": "tools/test_package_usb.py",

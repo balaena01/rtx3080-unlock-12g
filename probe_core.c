@@ -1,14 +1,24 @@
 #include "probe_core.h"
 
-static const UINT32 Offsets[PROBE_SAMPLE_COUNT] = {
+static const UINT32 Offsets[] = {
   0x000000, 0x118128, 0x118234, 0x110100, 0x1fa824, 0x1fa828,
   0x823804, 0x82381c, 0x823820, 0x1183a4, 0x625f04, 0x1fa7c8,
-  0x1fa82c, 0x1fa830, 0x824148, 0x8241e0
+  0x1fa82c, 0x1fa830, 0x824148, 0x8241e0,
+  /* The rest of the SEC2 (Booter) and GSP (FWSEC) ucode fuse banks. The core
+     picks one by the ucode_id in each image, which can differ by VBIOS. */
+  0x824140, 0x824144, 0x82414c, 0x824150, 0x824154, 0x824158, 0x82415c,
+  0x824160, 0x824164, 0x824168, 0x82416c, 0x824170, 0x824174, 0x824178,
+  0x82417c,
+  0x8241c0, 0x8241c4, 0x8241c8, 0x8241cc, 0x8241d0, 0x8241d4, 0x8241d8,
+  0x8241dc, 0x8241e4, 0x8241e8, 0x8241ec, 0x8241f0, 0x8241f4, 0x8241f8,
+  0x8241fc
 };
+_Static_assert(sizeof(Offsets) / sizeof(Offsets[0]) == PROBE_SAMPLE_COUNT,
+               "PROBE_SAMPLE_COUNT must match the register list");
 
 BOOLEAN ProbeMatches(const UINT32 *Config) {
-  return Config != NULL && Config[0] == 0x220610de &&
-         Config[11] == 0x38901462 && (Config[2] >> 24) == 3;
+  return Config != NULL && Config[0] == PROBE_TARGET_ID &&
+         Config[11] == PROBE_TARGET_SUBSYSTEM && (Config[2] >> 24) == 3;
 }
 
 EFI_STATUS ProbeCollect(EFI_PCI_IO_PROTOCOL *Pci, EFI_BOOT_SERVICES *Bs,

@@ -153,6 +153,7 @@ static VOID RecordGop(VOID) {
     Status = St->BootServices->HandleProtocol(Handles[I], &GopGuid, (VOID **)&Gop);
     if (EFI_ERROR(Status) || !Gop || !Gop->Mode) continue;
     Text("[GOP]\r\n"); Hex("index", I);
+    Hex("console_out", Handles[I] == St->ConsoleOutHandle);
     Hex("mode", Gop->Mode->Mode);
     Hex("framebuffer_base", Gop->Mode->FrameBufferBase);
     Hex("framebuffer_size", Gop->Mode->FrameBufferSize);
@@ -176,10 +177,10 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image, EFI_SYSTEM_TABLE *Table) {
   EFI_STATUS Status;
   PROBE_RESULT Result;
   St = Table; Bs = St->BootServices; Used = 0; Log[0] = 0;
-  Say(L"\r\nRTX 3080 read-only diagnostic v0.1\r\n");
+  Say(L"\r\nRTX 3080 12GB read-only diagnostic v0.2\r\n");
   Say(L"Collects BIOS and preboot state. This does not unlock the GPU.\r\n");
-  Text("RTX3080 read-only diagnostic v0.1\r\n");
-  Text("Expected PCI 10de:2206 subsystem 1462:3890\r\n");
+  Text("RTX3080 12GB read-only diagnostic v0.2\r\n");
+  Text("Expected PCI 10de:220a subsystem 1462:3896\r\n");
   Output = OpenOutput(Image);
   Status = Bs->LocateHandleBuffer(ByProtocol, &PciGuid, NULL, &Count, &Handles);
   Hex("pci_enumeration_status", Status);
@@ -191,13 +192,20 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image, EFI_SYSTEM_TABLE *Table) {
       Status = Bs->HandleProtocol(Handles[I], &PciGuid, (VOID **)&Pci);
       if (EFI_ERROR(Status) || Pci == NULL) continue;
       Status = Pci->Pci.Read(Pci, EfiPciIoWidthUint32, 0, 64, Config);
-      if (EFI_ERROR(Status) || (Config[0] & 0xffff) != 0x10de) continue;
-      Text("[NVIDIA PCI]\r\n");
+      if (EFI_ERROR(Status)) continue;
+      if ((Config[0] & 0xffff) == 0x10de) Text("[NVIDIA PCI]\r\n");
+      else if ((Config[2] >> 24) == 3) Text("[OTHER DISPLAY PCI]\r\n");
+      else continue;
       Status = Pci->GetLocation(Pci, &Segment, &Bus, &Device, &Function);
       Hex("location_status", Status); Hex("segment", Segment); Hex("bus", Bus);
       Hex("device", Device); Hex("function", Function);
       Hex("identity", Config[0]); Hex("class_revision", Config[2]);
       Hex("subsystem", Config[11]);
+      if ((Config[0] & 0xffff) != 0x10de) {
+        /* Display route evidence for the iGPU: config space and path only, no MMIO. */
+        Hex("command", Config[1] & 0xffff); PathHasUsb(Handles[I], TRUE);
+        continue;
+      }
       if (ProbeMatches(Config)) { Matches++; Selected = Pci; SelectedHandle = Handles[I]; }
     }
   }
@@ -205,7 +213,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image, EFI_SYSTEM_TABLE *Table) {
   Hex("matching_cards", Matches);
   RecordGop();
   if (Matches == 1) {
-    Say(L"Expected MSI RTX 3080 found. Reading its existing state...\r\n");
+    Say(L"Expected MSI RTX 3080 12GB found. Reading its existing state...\r\n");
     Text("[TARGET]\r\n"); PathHasUsb(SelectedHandle, TRUE);
     Status = ProbeCollect(Selected, Bs, &Result);
     Hex("collect_status", Status);
