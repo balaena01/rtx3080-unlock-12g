@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Linux build of the read-only probe (EFI + host tests), with the same compiler
 # and linker flags as unlock/build.ps1. Needs clang, lld-link and objdump.
-#   ./build-linux.sh [all|test|probe]
+#   ./build-linux.sh [all|test|probe|usb]
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -37,9 +37,19 @@ build_probe() {
   sha256sum build/PROBE-BOOTX64.EFI
 }
 
+# Copy the contents of build/usb-probe to the root of a FAT32 USB stick. The
+# probe only writes its report when the \RTX3080-PROBE directory exists there.
+stage_usb() {
+  rm -rf build/usb-probe
+  mkdir -p build/usb-probe/EFI/BOOT build/usb-probe/RTX3080-PROBE
+  cp build/PROBE-BOOTX64.EFI build/usb-probe/EFI/BOOT/BOOTX64.EFI
+  (cd build/usb-probe && sha256sum EFI/BOOT/BOOTX64.EFI)
+}
+
 case "${1:-all}" in
   test) test_probe ;;
   probe) build_probe ;;
-  all) test_probe; build_probe ;;
-  *) echo "usage: $0 [all|test|probe]" >&2; exit 2 ;;
+  usb) build_probe; stage_usb ;;
+  all) test_probe; build_probe; stage_usb ;;
+  *) echo "usage: $0 [all|test|probe|usb]" >&2; exit 2 ;;
 esac

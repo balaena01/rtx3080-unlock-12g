@@ -51,7 +51,7 @@
     },
     {
       "path": "build-linux.sh",
-      "sha256": "88bfbbc57ae4918452d59bf8e96199a3eee3a13cc379843af72b8e6e34d267a5"
+      "sha256": "3339953ee1868882a233f1f552b51320b3b94f35ccc46ac89b85c35c8e6b9722"
     },
     {
       "path": "deps/edk2/License.txt",
