@@ -141,6 +141,15 @@ static EFI_STATUS Save(EFI_FILE_PROTOCOL *Directory, CHAR16 *Name,
   return Status;
 }
 
+/* ConOut is normally ConSplitter, so no GOP handle ever equals it and the
+   per-GOP console_out field is always 0. Dump the console handle's own device
+   path instead: the analyser decodes the same route DisplayCheck requires. */
+static VOID RecordConsole(VOID) {
+  Text("[CONSOLE]\r\n");
+  Hex("console_handle_present", St->ConsoleOutHandle != NULL);
+  if (St->ConsoleOutHandle) PathHasUsb(St->ConsoleOutHandle, TRUE);
+}
+
 static VOID RecordGop(VOID) {
   EFI_HANDLE *Handles = NULL;
   UINTN Count = 0, I;
@@ -177,9 +186,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image, EFI_SYSTEM_TABLE *Table) {
   EFI_STATUS Status;
   PROBE_RESULT Result;
   St = Table; Bs = St->BootServices; Used = 0; Log[0] = 0;
-  Say(L"\r\nRTX 3080 12GB read-only diagnostic v0.2\r\n");
+  Say(L"\r\nRTX 3080 12GB read-only diagnostic v0.3\r\n");
   Say(L"Collects BIOS and preboot state. This does not unlock the GPU.\r\n");
-  Text("RTX3080 12GB read-only diagnostic v0.2\r\n");
+  Text("RTX3080 12GB read-only diagnostic v0.3\r\n");
   Text("Expected PCI 10de:220a subsystem 1462:3896\r\n");
   Output = OpenOutput(Image);
   Status = Bs->LocateHandleBuffer(ByProtocol, &PciGuid, NULL, &Count, &Handles);
@@ -212,6 +221,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image, EFI_SYSTEM_TABLE *Table) {
   if (Handles) Bs->FreePool(Handles);
   Hex("matching_cards", Matches);
   RecordGop();
+  RecordConsole();
   if (Matches == 1) {
     Say(L"Expected MSI RTX 3080 12GB found. Reading its existing state...\r\n");
     Text("[TARGET]\r\n"); PathHasUsb(SelectedHandle, TRUE);
