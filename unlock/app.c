@@ -1,6 +1,7 @@
 #include "app.h"
 #include "app_io.h"
 #include "compat/compat.h"
+#include "format.h"
 #include "checks.h"
 #include "sha256.h"
 #include "ownership.h"
@@ -9,14 +10,34 @@
 #include <Protocol/GraphicsOutput.h>
 #include <IndustryStandard/Acpi.h>
 #include <Guid/GlobalVariable.h>
+
+/* The preflight image compiles the transaction half out, which leaves a few
+   helpers referenced only from there. Keep one source file for both builds. */
+#if defined(GU_PREFLIGHT)
+#define GU_TX_ONLY __attribute__((unused))
+#else
+#define GU_TX_ONLY
+#endif
 static EFI_GUID PciGuid=EFI_PCI_IO_PROTOCOL_GUID,GopGuid=EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
   PathGuid=EFI_DEVICE_PATH_PROTOCOL_GUID,GlobalGuid=EFI_GLOBAL_VARIABLE;
 static EFI_SYSTEM_TABLE *Table;
 static UINT32 InitialConfig[64];
 static const char *Stage;
 static GU_RELEASE_OWNER PendingOwner;
+#if defined(GU_PREFLIGHT)
+static VOID PConsole(const char *Format,...) {
+  char text[128];va_list args;va_start(args,Format);
+  size_t n=GuFormatV(text,sizeof(text),Format,args);va_end(args);
+  if(n>=sizeof(text))GuConsole("Preflight line too long.\n");else GuConsole(text);
+}
+#endif
 static EFI_STATUS Step(EFI_STATUS Status) {
   GuLog("CHECK stage=%s status=%#llx\n",Stage,(unsigned long long)Status);
+#if defined(GU_PREFLIGHT)
+  /* The operator watches this screen; the report is read later on a PC. */
+  PConsole(EFI_ERROR(Status)?"CHECK %s FAIL (%#llx)\n":"CHECK %s ok (%#llx)\n",
+    Stage,(unsigned long long)Status);
+#endif
   return !GuLogReady() && !EFI_ERROR(Status)?EFI_DEVICE_ERROR:Status;
 }
 static VOID ConfigLog(const UINT32 *Config) {
@@ -114,6 +135,14 @@ static EFI_STATUS ReadConfig(UINT32 *Config) {
   }
   return EFI_SUCCESS;
 }
+/* BAR0 (config 0x10) is placed by platform firmware, not by the card: the
+   validated 10GB host put it at 0x84000000 and the 12GB host at 0x50000000.
+   Gate the shape - 16 MiB aligned, memory space, a real assignment - and let
+   BarCheck cross-check it against the firmware's own BAR descriptor. */
+static BOOLEAN Bar0Shape(UINT32 Bar) {
+  UINT32 base=Bar&0xfffffff0U;
+  return !(Bar&0x1U) && !(base&0x00ffffffU) && base!=0;
+}
 static EFI_STATUS ConfigCheck(BOOLEAN Save) {
   UINT32 config[64];GU_CAPS caps;UINTN segment,bus,device,function;
   EFI_STATUS status=Gu.pci->GetLocation(Gu.pci,&segment,&bus,&device,&function);
@@ -122,7 +151,7 @@ static EFI_STATUS ConfigCheck(BOOLEAN Save) {
   status=ReadConfig(config);if(EFI_ERROR(status))return status;
   BOOLEAN checked=GuCheckConfig(config,segment,bus,device,function,&caps);
   BOOLEAN valid=checked && config[2]==0x030000a1 && config[0xc8/4]==0x00050011 &&
-    config[0x10/4]==0x84000000 && !(config[(caps.pcie+8)/4]&0x00200000U);
+    Bar0Shape(config[0x10/4]) && !(config[(caps.pcie+8)/4]&0x00200000U);
   BOOLEAN same=Save || !memcmp(config,InitialConfig,sizeof(config));
   if(Save || !valid || !same)ConfigLog(config);
   GuLog("target BDF=%zu:%zu:%zu.%zu checks=%u pm=%#x pcie=%#x msi=%#x msix=%#x\n",
@@ -134,7 +163,7 @@ static EFI_STATUS ConfigCheck(BOOLEAN Save) {
   Gu.pm_cap=caps.pm;Gu.pcie_cap=caps.pcie;Gu.pcie_version=caps.pcie_version;Gu.msi_cap=caps.msi;Gu.msix_cap=caps.msix;
   return EFI_SUCCESS;
 }
-static EFI_STATUS RestoreDecode(VOID) {
+GU_TX_ONLY static EFI_STATUS RestoreDecode(VOID) {
   UINT32 current[64],normalized[64],after[64];UINTN segment,bus,device,function;
   if(!Gu.pci || !Gu.owned || !Gu.armed || !Gu.display_ok || Gu.started || Gu.allocations ||
     Gu.dma_count || Gu.fault || Gu.retained)return EFI_ACCESS_DENIED;
@@ -207,11 +236,17 @@ static EFI_STATUS BarCheck(VOID) {
       GuLog("bar0 descriptor: type=%u granularity=%llu min=%#llx max=%#llx length=%#llx translation=%#llx\n",
         (unsigned)r->ResType,(unsigned long long)r->AddrSpaceGranularity,(unsigned long long)r->AddrRangeMin,
         (unsigned long long)r->AddrRangeMax,(unsigned long long)r->AddrLen,(unsigned long long)r->AddrTranslationOffset);
+    /* The firmware descriptor must agree with the BAR0 base in config space;
+       that invariant replaces the old hardcoded 0x84000000 assignment. */
+    UINT64 expect=(UINT64)(InitialConfig[0x10/4]&0xfffffff0U);
+    BOOLEAN base_ok=r && r->AddrRangeMin==expect &&
+      (r->AddrRangeMax==expect+0xffffffU || r->AddrRangeMax==0x00ffffffU);
+    GuLog("bar0 cross-check: config_base=%#llx descriptor_base=%#llx agree=%u\n",
+      (unsigned long long)expect,(unsigned long long)(r?r->AddrRangeMin:0),(unsigned)base_ok);
     if(!r || r->Desc!=ACPI_ADDRESS_SPACE_DESCRIPTOR || r->Len!=sizeof(*r)-3 || r->ResType!=0 ||
-      r->AddrRangeMin!=0x84000000 || r->AddrLen!=0x1000000 || r->AddrTranslationOffset ||
+      !base_ok || r->AddrLen!=0x1000000 || r->AddrTranslationOffset ||
       /* UEFI describes an inclusive end; pinned EDK2 PciBusDxe instead returns
          PciBar.Alignment. Both representations describe this exact 16 MiB BAR. */
-      (r->AddrRangeMax!=0x84ffffff && r->AddrRangeMax!=0x00ffffff) ||
       r->AddrSpaceGranularity!=32 || ((UINT8 *)(r+1))[0]!=ACPI_END_TAG_DESCRIPTOR)status=EFI_UNSUPPORTED;
     else {
       UINT8 *raw=(UINT8 *)r,sum=0;
@@ -223,27 +258,42 @@ static EFI_STATUS BarCheck(VOID) {
   if(r)GuFree(r);return status;
 }
 static EFI_STATUS ColdCheck(VOID) {
-  UINT32 chip=GuRead32(0);GuLog("chip: actual=%#x expected=%#x\n",chip,GU_BOARD_CHIP);
-  if(chip!=GU_BOARD_CHIP)return EFI_UNSUPPORTED;
+  UINT32 chip=GuRead32(0);BOOLEAN chip_ok=chip==GU_BOARD_CHIP;
+  GuLog("chip: actual=%#x expected=%#x pass=%u\n",chip,GU_BOARD_CHIP,(unsigned)chip_ok);
+#ifdef GU_PREFLIGHT
+  /* Preflight never writes, so an unexpected die ID is reported and the rest
+     of the read-only gates still run. The transaction build keeps the reject. */
+  if(!chip_ok)GuLogText("PREFLIGHT: chip mismatch recorded; continuing read-only gates.\n");
+#else
+  if(!chip_ok)return EFI_UNSUPPORTED;
+#endif
   struct gpu_unlock_gfw_sample s={.config_ok=true,.plm=GuRead32(GU_GFW_PLM_OFFSET),
     .boot=GuRead32(GU_GFW_BOOT_OFFSET),.cpuctl=GuRead32(GU_GFW_CPUCTL_OFFSET)};
-  UINT32 hi=GuRead32(0x1fa828),plm=GuRead32(GU_FEAT_PLM_OFFSET),ss0=GuRead32(GU_FEAT_SS0_OFFSET),ss1=GuRead32(GU_FEAT_SS1_OFFSET);
-  GuLog("cold state: chip=%#x plm=%#x gfw=%#x/%#x/%#x WPR2_HI=%#x SS0=%#x SS1=%#x\n",
-    GU_BOARD_CHIP,plm,s.plm,s.boot,s.cpuctl,hi,ss0,ss1);
-  if(Gu.fault || gpu_unlock_gfw_assess(&s) || hi>>4 || plm!=0xffffff8f ||
-    ss0!=0x46254040 || (ss1!=2 && ss1!=3) || GuRead32(0x1183a4)!=0x2800)return EFI_NOT_READY;
+  UINT32 hi=GuRead32(0x1fa828),plm=GuRead32(GU_FEAT_PLM_OFFSET),ss0=GuRead32(GU_FEAT_SS0_OFFSET),
+    ss1=GuRead32(GU_FEAT_SS1_OFFSET),fb_mb=GuRead32(0x1183a4);
+  GuLog("cold state: chip=%#x plm=%#x gfw=%#x/%#x/%#x WPR2_HI=%#x SS0=%#x SS1=%#x fb_mb=%#x\n",
+    GU_BOARD_CHIP,plm,s.plm,s.boot,s.cpuctl,hi,ss0,ss1,fb_mb);
+  /* Every expected value is per-board; the profile in port.h owns them. */
+  BOOLEAN gfw_ok=!gpu_unlock_gfw_assess(&s),plm_ok=plm==0xffffff8f,hi_ok=!(hi>>4),
+    ss0_ok=(ss0&GU_BOARD_SS0_MASK)==GU_BOARD_SS0_VALUE,
+    ss1_ok=ss1<32 && ((GU_BOARD_SS1_BITS>>ss1)&1U),
+    fb_ok=fb_mb==GU_BOARD_FB_MB;
+  GuLog("cold gates: gfw=%u plm=%u wpr2_hi=%u ss0=%u ss1=%u fb_mb=%u\n",
+    (unsigned)gfw_ok,(unsigned)plm_ok,(unsigned)hi_ok,(unsigned)ss0_ok,(unsigned)ss1_ok,(unsigned)fb_ok);
+  if(Gu.fault || !gfw_ok || !plm_ok || !hi_ok || !ss0_ok || !ss1_ok || !fb_ok)return EFI_NOT_READY;
   return Gu.fault?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static EFI_STATUS PromCheck(VOID) {
   VOID *prom=GuAlloc(1048576);if(!prom)return EFI_OUT_OF_RESOURCES;
   GuCopyFromIo(prom,(VOID *)(UINTN)(Gu.bar_base+0x300000),1048576);
-  BOOLEAN good=!Gu.fault && GuHashMatches(prom,1048576,"f3dc8f07b0b8c9856d192df172dfa7f7f84ac17ef6edfdb448ad7fa94efd2789");
-  GuFree(prom);GuLog("live PROM hash matched=%u\n",(unsigned)good);return good?EFI_SUCCESS:EFI_CRC_ERROR;
+  BOOLEAN good=!Gu.fault && GuHashMatches(prom,1048576,GU_BOARD_PROM_SHA256);
+  GuFree(prom);GuLog("live PROM hash matched=%u base=%#llx expected=%s\n",
+    (unsigned)good,(unsigned long long)Gu.bar_base,GU_BOARD_PROM_SHA256);return good?EFI_SUCCESS:EFI_CRC_ERROR;
 }
-static EFI_STATUS Arm(VOID) {
+GU_TX_ONLY static EFI_STATUS Arm(VOID) {
   if(!Table->ConIn || !Table->ConIn->Reset || !Table->ConIn->ReadKeyStroke)return EFI_UNSUPPORTED;
   EFI_STATUS status=Table->ConIn->Reset(Table->ConIn,FALSE);if(EFI_ERROR(status))return status;
-  GuLogText("READY: MSI RTX 3080 10GB / Intel display / verified USB log and firmware.\n");
+  GuLog("READY: %s / Intel display / verified USB log and firmware.\n",GU_BOARD_LABEL);
   if(PendingOwner.agent)GuLogText("U will release the RTX firmware driver, restore verified access settings if needed, then recheck and attempt once.\n");
   GuLogText("Press U to attempt once; Esc or 30-second timeout cancels.\n");
   if(!GuLogReady())return EFI_DEVICE_ERROR;
@@ -305,6 +355,20 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   Stage="bar0";status=Step(BarCheck());if(EFI_ERROR(status))goto finish;
   Stage="cold-state";status=Step(ColdCheck());if(EFI_ERROR(status))goto finish;
   Stage="prom";status=Step(PromCheck());if(EFI_ERROR(status))goto finish;
+#if defined(GU_PREFLIGHT)
+  /* Read-only preflight: the gates above only read - config space, the
+     firmware BAR descriptor, and MMIO of the PROM window - plus a transient
+     exclusive PciIo open that finish releases. Stop here: no bus-master
+     enable, no FLR, no MMIO write, no transaction, no asset loading. */
+  Stage="preflight-summary";
+  GuLogText("PREFLIGHT: read-only gates complete; nothing was written to the GPU.\n");
+  GuLog("PREFLIGHT result=pass board=%s pci=%#x subsystem=%#x bar0=%#llx command=%#x\n",
+    GU_BOARD_LABEL,GU_BOARD_ID,GU_BOARD_SUBSYSTEM,(unsigned long long)Gu.bar_base,
+    (unsigned)(InitialConfig[1]&0xffff));
+  status=GuLogReady()?EFI_SUCCESS:EFI_DEVICE_ERROR;
+  goto finish;
+#else
+  /* Every line below this point is absent from the preflight image. */
   Stage="assets";status=Step(GuLoadAssets());if(EFI_ERROR(status))goto finish;
   Stage="arming";status=Step(Arm());if(EFI_ERROR(status))goto finish;
   Stage="armed-config";status=Step(ConfigCheck(FALSE));if(EFI_ERROR(status))goto finish;
@@ -354,6 +418,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   if(EFI_ERROR(contained) || !GuSafeToReturn() || Gu.allocations || (Gu.started && result))Halt();
   gpu_unlock_610_release_shared(&shared);Gu.armed=FALSE;
   status=result?EFI_DEVICE_ERROR:EFI_SUCCESS;
+#endif
 finish:
   if(release_attempted && (EFI_ERROR(status) || Gu.fault))ReleaseHalt(status,attempted);
   if(attempted && !GuSafeToReturn())Halt();
@@ -368,7 +433,12 @@ finish:
     if(EFI_ERROR(closed)){if(release_attempted)ReleaseHalt(closed,attempted);if(Gu.started)Halt();status=closed;}else Gu.owned=FALSE;
   }
   GuReleaseAssets();
+#if defined(GU_PREFLIGHT)
+  GuConsole(!EFI_ERROR(status)?"PREFLIGHT passed. Nothing was written; returning to firmware.\n"
+    :"PREFLIGHT failed one or more gates. Nothing was written; returning to firmware.\n");
+#else
   if(!EFI_ERROR(status))GuConsole("UEFI transaction completed and cleaned up. Returning to firmware; Windows validation is pending.\n");
   else GuConsole("Attempt cancelled or rejected. Returning without another attempt.\n");
+#endif
   return status;
 }

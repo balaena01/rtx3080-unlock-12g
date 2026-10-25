@@ -43,6 +43,27 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\unlock\test-all.ps1
 
 빌드는 `unlock/build/BOOTX64.EFI`를 만들고 PE 형식을 검사합니다. 검사 명령은 GPU를 실행하지 않습니다. 추가 fixture를 사용하는 전체 모의 검사와 패키지 생성 방법은 [TESTING.md](TESTING.md)를 참고하세요.
 
+## 12GB(220a) 프로필과 리드온리 preflight
+
+`unlock/port.h`는 보드 프로필을 컴파일 시점에 고릅니다. 기본값은 위에서 검증한 10GB
+(`10de:2206` / `1462:3890`)이고, `-DGU_BOARD_220A`를 주면 12GB
+(`10de:220a` / `1462:3896`, 12288MiB, PROM SHA256 `799d147b…`)가 됩니다. 두 프로필의
+기대값은 각 카드의 펌웨어 덤프에서만 가져왔으므로 섞어 쓰면 안 됩니다.
+
+```bash
+./preflight-linux.sh preflight     # build/preflight-12gb/BOOTX64.EFI
+./preflight-linux.sh transaction   # build/transaction-12gb/BOOTX64.EFI
+./preflight-linux.sh all           # 위 둘 + 검증된 10GB transaction
+./preflight-linux.sh usb           # build/usb-preflight/EFI/BOOT/BOOTX64.EFI
+```
+
+`preflight` 빌드는 `-DGU_PREFLIGHT`로 ARM/transaction 코드를 링크에서 제외합니다.
+config space, 펌웨어 BAR 기술자, PROM 창 MMIO를 읽기만 하고 GPU에는 아무것도 쓰지
+않으며, PciIo 독점 열기도 검사 직후 닫습니다. 실패하면 어느 게이트에서 멈췄는지가
+콘솔과 `REPORT.TXT`에 남습니다. 12GB 실기의 게이트 기대값, 오프라인 재평가 도구
+(`analysis/r769/preflight_gate_replay.py`), 실행 절차는 워크스페이스의
+`analysis/r769/preflight-12gb.md`에 정리되어 있습니다.
+
 ## 출처와 라이선스
 
 이 프로젝트의 포트와 재사용 코어는 **GPL-2.0-only**입니다. 핵심 코드는 [Zagitta/gpu-unlock](https://github.com/Zagitta/gpu-unlock/tree/0ebdb1c6308b6a2072be5bf04513472942541956)에서 가져왔습니다. 포함된 EDK2 헤더와 관련 고지는 각각의 라이선스를 따릅니다.
