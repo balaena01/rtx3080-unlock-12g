@@ -45,13 +45,27 @@ USB テンプレートには EFI、ソース、使い方、ライセンスが入
 | TF32 4096 | 28.3 | 51.1 | +80% | 1905 → 1635 MHz |
 | FP32 4096（比較用） | 17.8 | 19.1 | +7% | 1515 → 1485 MHz |
 
-単位は TFLOPS。PyTorch の matmul（FP32 累算）を、解除前と解除後で同じカード・同じハーネスで測ったものです。生の値は [results/pytorch-matrix.json](results/pytorch-matrix.json) にあります。
+単位は TFLOPS。PyTorch の matmul（FP32 累算）を、同じカード・同じハーネスで測ったものです。解除前の列は、解除前にこのカードで別セッションで取得した値です。生の値は [results/pytorch-matrix.json](results/pytorch-matrix.json) にあります。
 
 SM クロックで割り算すると、何が起きたのかが見えます。
 
 - BF16・FP16・TF32 は解除後に **クロック当たり ×2.0〜2.1**（32.3 → 66.0、31.9 → 65.8、32.3 → 68.6、32.3 → 68.3、14.9 → 31.3 TFLOPS/GHz）。テンソル経路がそろって 2 倍になっており、半速のテンソル経路が戻ったときの形そのものです。
 - 実測の伸びが 70〜84% にとどまるのは、解除後の実行が低いクロックに落ち着くためです（1815 → 1530 MHz など）。クロック当たりは 2 倍になり、その一部をクロックが返している形です。クロックが下がる理由そのものは直接測っていませんが、消費電力の枠が有力です。
 - FP32 4096 はクロック当たり ×1.09。FP32 はパッチ対象の経路を使わないので、解除の効果ではなくクロックと測定のばらつきとして読んでください。上の cuBLAS `fp32_pedantic`（−0.61%）とも食い違いますが、これは別のハーネスです。
+
+## llama.cpp の prefill（Saluki 27B IQ2）
+
+| プロンプト長 | prefill 前 | prefill 後 | 伸び | 生成 |
+| --- | ---: | ---: | ---: | --- |
+| 512 トークン | 849 tok/s | 945 tok/s | +11% | 変化なし |
+| 2048 トークン | 959 tok/s | 1042 tok/s | +9% | 変化なし |
+| 8192 トークン | 1006 tok/s | 1086 tok/s | +8% | 変化なし |
+
+`llama-server`（llama.cpp）、Saluki 27B の IQ2、prefill のスループット。解除の前後で同じカード。データは [results/llm-prefill.json](results/llm-prefill.json)。
+
+- 伸びは 1 割程度で、2 倍にはなりません。IQ2 のモデルは計算の大半を量子化カーネルで回しており、そこはパッチ対象の FP16 テンソル経路を通りません。伸びているのは、attention の一部など FP16 で走る部分です。
+- 生成速度は動きません。1 トークンずつ出す推論はメモリ帯域で決まり、解除は VRAM 帯域を変えないからです。予想どおりの結果です。
+- カーネル単位のプロファイルは取っていないので、上の切り分けは数字からの推論で、計測ではありません。
 
 ## ビルドと検査
 
@@ -77,7 +91,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\unlock\test-all.ps1
 
 `preflight` ビルドは `-DGU_PREFLIGHT` を渡し、ARM/transaction のコードをリンクから外します。config space、ファームウェアの BAR 記述子、PROM ウィンドウの MMIO を読むだけで GPU には何も書かず、PciIo の排他オープンも検査直後に閉じます。失敗した場合はどのゲートで止まったかがコンソールと `REPORT.TXT` に残ります。12GB 実機のゲート期待値、オフライン再評価ツール（`analysis/r769/preflight_gate_replay.py`）、実行手順はワークスペースの `analysis/r769/preflight-12gb.md` にまとまっています。
 
-12GB プロファイルの実機状況: 読み取り専用 preflight は 10 ゲートすべて PASS、本番トランザクションは 1 回実行して `status=0 stage=transaction attempted=1 driver_release=1 clean=1`（`FLR=1`）で完了しました。その実行後の FP16 Tensor GEMM は 109.5 TFLOPS です。同じ 12GB 機での pre-unlock 計測はまだ取っていません。パッチはその起動の VRAM 上だけにあり、再起動で消えます。
+12GB プロファイルの実機状況: 読み取り専用 preflight は 10 ゲートすべて PASS、本番トランザクションは 1 回実行して `status=0 stage=transaction attempted=1 driver_release=1 clean=1`（`FLR=1`）で完了しました。その実行後の FP16 Tensor GEMM は 109.5 TFLOPS で、解除前に同じこのカードで別セッションに取った 60.5〜61.4 TFLOPS と対になります。ただし交互に取り直した計測ではないので、比は目安として読んでください。パッチはその起動の VRAM 上だけにあり、再起動で消えます。
 
 ## 出典とライセンス
 

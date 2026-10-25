@@ -45,13 +45,27 @@ These are 4096×4096 GEMM measurements taken with the same executable and the sa
 | TF32 4096 | 28.3 | 51.1 | +80% | 1905 → 1635 MHz |
 | FP32 4096 (reference) | 17.8 | 19.1 | +7% | 1515 → 1485 MHz |
 
-TFLOPS, PyTorch matmul with FP32 accumulation, same card and same harness before and after the unlock. Raw values are in [results/pytorch-matrix.json](results/pytorch-matrix.json).
+TFLOPS, PyTorch matmul with FP32 accumulation, same card and the same harness. The before column was measured on this card before the unlock, in an earlier session. Raw values are in [results/pytorch-matrix.json](results/pytorch-matrix.json).
 
 Normalising by the SM clock makes the mechanism visible:
 
 - BF16, FP16 and TF32 reach **×2.0–2.1 TFLOPS per clock** after the unlock (32.3 → 66.0, 31.9 → 65.8, 32.3 → 68.6, 32.3 → 68.3, 14.9 → 31.3 TFLOPS/GHz). All tensor paths double per clock, which is what restoring a half-rate tensor path looks like.
 - The absolute gain is only 70–84% because the unlocked runs settle at lower clocks (1815 → 1530 MHz, and so on). The per-clock throughput doubled and the clock gave part of it back. The reason for the lower clocks has not been measured directly; the power budget is the plausible explanation.
 - FP32 at 4096 moves ×1.09 per clock. FP32 does not use the patched path, so read it as clock and measurement variation rather than an unlock effect. It also disagrees with the cuBLAS `fp32_pedantic` run above (−0.61%), which is a different harness.
+
+## llama.cpp prefill (Saluki 27B IQ2)
+
+| Prompt length | Prefill before | Prefill after | Change | Generation |
+| --- | ---: | ---: | ---: | --- |
+| 512 tokens | 849 tok/s | 945 tok/s | +11% | unchanged |
+| 2048 tokens | 959 tok/s | 1042 tok/s | +9% | unchanged |
+| 8192 tokens | 1006 tok/s | 1086 tok/s | +8% | unchanged |
+
+`llama-server` (llama.cpp), Saluki 27B at IQ2, prefill throughput. Same card before and after the unlock. Data: [results/llm-prefill.json](results/llm-prefill.json).
+
+- The gain is about a tenth, not a doubling. An IQ2 model runs most of its matmuls through the quantized kernels, which do not use the patched FP16 tensor path. What improves is the part that still runs in FP16, such as parts of attention.
+- Generation speed does not move, which is what the memory-bandwidth limit predicts: decoding one token at a time is bandwidth-bound, and the unlock does not change VRAM bandwidth.
+- No per-kernel profile was taken, so the split above is read off the numbers rather than measured.
 
 ## Build and test
 
@@ -77,7 +91,7 @@ The build produces `unlock/build/BOOTX64.EFI` and checks the PE format. The test
 
 The `preflight` build passes `-DGU_PREFLIGHT` and drops the ARM/transaction code at link time. It only reads config space, firmware BAR descriptors and the PROM window over MMIO, writes nothing to the GPU, and closes the exclusive PciIo open as soon as each check is done. On failure, the gate that stopped it is printed on the console and recorded in `REPORT.TXT`. Gate expectations for the 12GB card, the offline replay tool (`analysis/r769/preflight_gate_replay.py`) and the run procedure are documented in `analysis/r769/preflight-12gb.md` in the workspace.
 
-Hardware status of the 12GB profile: the read-only preflight passes all ten gates, and one transaction run completed with `status=0 stage=transaction attempted=1 driver_release=1 clean=1` (`FLR=1`). FP16 Tensor GEMM measured 109.5 TFLOPS after that run. A pre-unlock measurement on the same 12GB machine has not been taken yet; the patch lives only in VRAM for the current boot and is gone after a reboot.
+Hardware status of the 12GB profile: the read-only preflight passes all ten gates, and one transaction run completed with `status=0 stage=transaction attempted=1 driver_release=1 clean=1` (`FLR=1`). After that run FP16 Tensor GEMM measured 109.5 TFLOPS, against 60.5–61.4 TFLOPS measured on this same card before the unlock in an earlier session. The tables above are not interleaved runs, so read the ratios as an estimate. The patch lives only in VRAM for the current boot and is gone after a reboot.
 
 ## Provenance and license
 

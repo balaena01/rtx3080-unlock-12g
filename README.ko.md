@@ -45,8 +45,8 @@ USB 템플릿에는 EFI, 소스, 사용법과 라이선스가 들어 있습니�
 | TF32 4096 | 28.3 | 51.1 | +80% | 1905 → 1635 MHz |
 | FP32 4096 (비교용) | 17.8 | 19.1 | +7% | 1515 → 1485 MHz |
 
-단위는 TFLOPS. PyTorch matmul(FP32 누산)을 해제 전과 해제 후에 같은 카드, 같은 하네스로
-측정했습니다. 원본 값은 [results/pytorch-matrix.json](results/pytorch-matrix.json)에 있습니다.
+단위는 TFLOPS. PyTorch matmul(FP32 누산)을 같은 카드, 같은 하네스로 측정했습니다. 해제 전 열은
+해제 전에 이 카드에서 별도 세션으로 얻은 값입니다. 원본 값은 [results/pytorch-matrix.json](results/pytorch-matrix.json)에 있습니다.
 
 SM 클럭으로 나눠 보면 무슨 일이 일어났는지가 보입니다.
 
@@ -59,6 +59,24 @@ SM 클럭으로 나눠 보면 무슨 일이 일어났는지가 보입니다.
 - FP32 4096은 클럭당 ×1.09입니다. FP32는 패치 대상 경로를 쓰지 않으므로 해제 효과가 아니라
   클럭과 측정 편차로 읽어야 합니다. 위의 cuBLAS `fp32_pedantic`(−0.61%)과도 어긋나지만
   이는 다른 하네스입니다.
+
+## llama.cpp prefill (Saluki 27B IQ2)
+
+| 프롬프트 길이 | prefill 전 | prefill 후 | 증가 | 생성 |
+| --- | ---: | ---: | ---: | --- |
+| 512 토큰 | 849 tok/s | 945 tok/s | +11% | 변화 없음 |
+| 2048 토큰 | 959 tok/s | 1042 tok/s | +9% | 변화 없음 |
+| 8192 토큰 | 1006 tok/s | 1086 tok/s | +8% | 변화 없음 |
+
+`llama-server`(llama.cpp), Saluki 27B IQ2의 prefill 처리량. 해제 전후 같은 카드.
+데이터는 [results/llm-prefill.json](results/llm-prefill.json)에 있습니다.
+
+- 증가는 1할 정도이고 2배가 되지는 않습니다. IQ2 모델은 계산의 대부분을 양자화 커널로
+  돌리며, 그 경로는 패치 대상인 FP16 텐서 경로를 지나지 않습니다. 늘어난 것은 attention의
+  일부처럼 FP16으로 도는 부분입니다.
+- 생성 속도는 움직이지 않습니다. 토큰을 하나씩 내보내는 추론은 메모리 대역으로 정해지고,
+  해제는 VRAM 대역을 바꾸지 않기 때문입니다. 예상대로입니다.
+- 커널 단위 프로파일은 뜨지 않았으므로 위 구분은 숫자에서 읽은 추론이며 계측이 아닙니다.
 
 ## 빌드와 검사
 
@@ -94,9 +112,9 @@ config space, 펌웨어 BAR 기술자, PROM 창 MMIO를 읽기만 하고 GPU에�
 
 12GB 프로필의 실기 상태: 읽기 전용 preflight는 10개 게이트 모두 PASS, 본 transaction은
 1회 실행해 `status=0 stage=transaction attempted=1 driver_release=1 clean=1`(`FLR=1`)로
-완료했습니다. 그 실행 후 FP16 Tensor GEMM은 109.5 TFLOPS입니다. 같은 12GB 기기에서의
-pre-unlock 계측은 아직 받지 않았습니다. 패치는 해당 부팅의 VRAM에만 있고 재부팅하면
-사라집니다.
+완료했습니다. 그 실행 후 FP16 Tensor GEMM은 109.5 TFLOPS이고, 해제 전에 같은 카드에서
+별도 세션으로 받은 60.5~61.4 TFLOPS와 짝을 이룹니다. 다만 번갈아 다시 측정한 것은 아니므로
+비율은 참고값으로 읽어 주세요. 패치는 해당 부팅의 VRAM에만 있고 재부팅하면 사라집니다.
 
 ## 출처와 라이선스
 
