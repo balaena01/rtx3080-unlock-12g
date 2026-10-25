@@ -1,71 +1,67 @@
 # RTX 3080 Unlock
 
-MSI RTX 3080 10GB에서 검증한 Windows용 UEFI 연산 언락 실험입니다. USB로 UEFI 앱을 실행한 뒤, 재부팅 없이 Windows로 이어서 부팅합니다.
+**English** | [日本語](README.ja.md) | [한국어](README.ko.md)
 
-**지원 범위는 아래의 실험 환경입니다.** 다른 제조사의 RTX 3080이나 RTX 3090을 지원하는 범용 도구가 아닙니다. 장치·화면 경로·펌웨어 검사에 맞지 않으면 실행을 거부합니다.
+A UEFI compute-unlock experiment for Windows, validated on an MSI RTX 3080 10GB. A UEFI application runs from a USB stick and then hands control straight back to Windows Boot Manager, without a reboot in between.
 
-## USB로 사용하기
+**The supported scope is only the experimental environment listed below.** This is not a general-purpose tool for RTX 3080 cards from other vendors, nor for the RTX 3090. If the device, the display path or the firmware checks do not match, the application refuses to run.
 
-1. [USB 준비 및 부팅 안내](docs/USB-BOOT.md)에 따라 FAT32 USB와 필요한 파일을 준비합니다.
-2. UEFI 부팅 메뉴에서 USB를 선택합니다.
-3. 사전 검사가 끝나 `READY`가 표시되면 **U를 한 번** 누릅니다.
-4. 성공 후 펌웨어 메뉴로 돌아오면 **Windows Boot Manager**를 선택합니다. 이 사이에 재부팅하지 않습니다.
+## Running it from USB
 
-USB 템플릿에는 EFI, 소스, 사용법과 라이선스가 들어 있습니다. 실행 자산 5개는 로컬에서 추가해야 합니다. `unlock/assets.json`에 파일명·크기·SHA256이 정리되어 있습니다. 템플릿만 복사한 상태에서는 실행할 수 없습니다.
+1. Prepare a FAT32 USB stick and the required files as described in [USB preparation and booting](docs/USB-BOOT.md).
+2. Select the USB stick in the UEFI boot menu.
+3. When the read-only checks finish and `READY` is shown, press **U once**.
+4. After success, control returns to the firmware menu: choose **Windows Boot Manager**. Do not reboot in between.
 
-## 확인한 환경
+The USB template contains the EFI application, the sources, usage notes and licenses. The five runtime assets must be added locally; `unlock/assets.json` lists their file names, sizes and SHA256 values. A template copied as-is cannot run.
+
+## Tested environment
 
 - MSI RTX 3080 10GB: PCI `10de:2206`, subsystem `1462:3890`, VBIOS `94.02.59.00.aa`.
-- ASUS TUF GAMING B660M-PLUS D4, Intel i5-13600K / UHD 770 화면 출력.
-- Windows 11 Pro build 26200, NVIDIA 610.60 드라이버.
-- v0.10 실제 실행: UEFI transaction과 정리 완료 후 Windows CUDA 측정.
+- ASUS TUF GAMING B660M-PLUS D4, Intel i5-13600K / UHD 770 for display output.
+- Windows 11 Pro build 26200, NVIDIA 610.60 driver.
+- v0.10 real run: UEFI transaction and cleanup completed, then CUDA measurements on the Windows side.
 
-현재 코드는 BDF `0000:01:00.0`, BAR, 보드 PROM 및 Intel 화면 경로도 검사합니다. 같은 제품명이어도 다른 PC에서의 동작은 확인되지 않았습니다. 새 FAT32 USB에서의 실제 부팅은 별도 검증 대상입니다.
+The current code also checks BDF `0000:01:00.0`, BARs, the board PROM and the Intel display path. The same product name on a different PC has not been validated. Booting from a freshly built FAT32 USB stick is still a separate validation item.
 
-## 측정 결과
+## Measured results
 
-| 측정 | 이전 TFLOPS | 적용 후 TFLOPS | 변화 |
+| Measurement | Before (TFLOPS) | After (TFLOPS) | Change |
 | --- | ---: | ---: | ---: |
 | FP32 pedantic | 22.057145 | 21.922047 | −0.61% |
-| FP16 Tensor / FP32 누산 | 60.874030 | 109.217226 | +79.42% |
-| BF16 Tensor / FP32 누산 | 60.910719 | 113.090926 | +85.67% |
+| FP16 Tensor / FP32 accumulate | 60.874030 | 109.217226 | +79.42% |
+| BF16 Tensor / FP32 accumulate | 60.910719 | 113.090926 | +85.67% |
 
-동일 실행 파일과 CUDA/cuBLAS 환경의 4096×4096 GEMM 측정입니다. 기준값은 한 프로세스, 적용 후 값은 세 프로세스 중앙값들의 중앙값입니다. 게임 성능, 모든 AI 작업의 향상률, 장시간 안정성이나 콜드부팅 후 지속성을 의미하지 않습니다. [측정 자료](results/benchmark.json)와 [실제 UEFI 실행 로그](evidence/unlock-boot-09/REPORT.TXT)를 함께 제공합니다. 측정 자료에서는 개인 경로와 장치 UUID를 제외했습니다.
+These are 4096×4096 GEMM measurements taken with the same executable and the same CUDA/cuBLAS environment. The baseline is a single process; the post-unlock value is the median of three process medians. They do not imply game performance, the speedup of every AI workload, long-run stability, or persistence across a cold boot. [Measurement data](results/benchmark.json) and the [real UEFI run log](evidence/unlock-boot-09/REPORT.TXT) are included. Personal paths and device UUIDs were removed from the measurement data.
 
-## 빌드와 검사
+## Build and test
 
-Windows 개발 환경: LLVM/clang 12 + lld-link(VS2019 BuildTools), MSVC 환경(VS2022 Community), Python 3.9 이상. 스크립트의 기본 도구 경로는 이 설치 구성을 기준으로 합니다.
+Windows development environment: LLVM/clang 12 + lld-link (VS2019 BuildTools), an MSVC environment (VS2022 Community), Python 3.9 or newer. The default tool paths in the scripts assume this installation.
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\unlock\build.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\unlock\test-all.ps1
 ```
 
-빌드는 `unlock/build/BOOTX64.EFI`를 만들고 PE 형식을 검사합니다. 검사 명령은 GPU를 실행하지 않습니다. 추가 fixture를 사용하는 전체 모의 검사와 패키지 생성 방법은 [TESTING.md](TESTING.md)를 참고하세요.
+The build produces `unlock/build/BOOTX64.EFI` and checks the PE format. The test commands do not touch the GPU. For the full simulated test that needs extra fixtures, and for packaging, see [TESTING.md](TESTING.md).
 
-## 12GB(220a) 프로필과 리드온리 preflight
+## 12GB (220a) profile and the read-only preflight
 
-`unlock/port.h`는 보드 프로필을 컴파일 시점에 고릅니다. 기본값은 위에서 검증한 10GB
-(`10de:2206` / `1462:3890`)이고, `-DGU_BOARD_220A`를 주면 12GB
-(`10de:220a` / `1462:3896`, 12288MiB, PROM SHA256 `799d147b…`)가 됩니다. 두 프로필의
-기대값은 각 카드의 펌웨어 덤프에서만 가져왔으므로 섞어 쓰면 안 됩니다.
+`unlock/port.h` selects the board profile at compile time. The default is the 10GB card validated above (`10de:2206` / `1462:3890`); `-DGU_BOARD_220A` selects the 12GB card (`10de:220a` / `1462:3896`, 12288 MiB, PROM SHA256 `799d147b…`). Every expected value in both profiles comes from that card's own firmware dump, so the two must never be mixed.
 
 ```bash
 ./preflight-linux.sh preflight     # build/preflight-12gb/BOOTX64.EFI
 ./preflight-linux.sh transaction   # build/transaction-12gb/BOOTX64.EFI
-./preflight-linux.sh all           # 위 둘 + 검증된 10GB transaction
+./preflight-linux.sh all           # both of the above + the validated 10GB transaction
 ./preflight-linux.sh usb           # build/usb-preflight/EFI/BOOT/BOOTX64.EFI
 ```
 
-`preflight` 빌드는 `-DGU_PREFLIGHT`로 ARM/transaction 코드를 링크에서 제외합니다.
-config space, 펌웨어 BAR 기술자, PROM 창 MMIO를 읽기만 하고 GPU에는 아무것도 쓰지
-않으며, PciIo 독점 열기도 검사 직후 닫습니다. 실패하면 어느 게이트에서 멈췄는지가
-콘솔과 `REPORT.TXT`에 남습니다. 12GB 실기의 게이트 기대값, 오프라인 재평가 도구
-(`analysis/r769/preflight_gate_replay.py`), 실행 절차는 워크스페이스의
-`analysis/r769/preflight-12gb.md`에 정리되어 있습니다.
+The `preflight` build passes `-DGU_PREFLIGHT` and drops the ARM/transaction code at link time. It only reads config space, firmware BAR descriptors and the PROM window over MMIO, writes nothing to the GPU, and closes the exclusive PciIo open as soon as each check is done. On failure, the gate that stopped it is printed on the console and recorded in `REPORT.TXT`. Gate expectations for the 12GB card, the offline replay tool (`analysis/r769/preflight_gate_replay.py`) and the run procedure are documented in `analysis/r769/preflight-12gb.md` in the workspace.
 
-## 출처와 라이선스
+Hardware status of the 12GB profile: the read-only preflight passes all ten gates, and one transaction run completed with `status=0 stage=transaction attempted=1 driver_release=1 clean=1` (`FLR=1`). FP16 Tensor GEMM measured 109.5 TFLOPS after that run. A pre-unlock measurement on the same 12GB machine has not been taken yet; the patch lives only in VRAM for the current boot and is gone after a reboot.
 
-이 프로젝트의 포트와 재사용 코어는 **GPL-2.0-only**입니다. 핵심 코드는 [Zagitta/gpu-unlock](https://github.com/Zagitta/gpu-unlock/tree/0ebdb1c6308b6a2072be5bf04513472942541956)에서 가져왔습니다. 포함된 EDK2 헤더와 관련 고지는 각각의 라이선스를 따릅니다.
+## Provenance and license
 
-[LICENSE](LICENSE)와 [외부 코드 고지](THIRD_PARTY_NOTICES.md)를 확인하세요.
+The port and the reused core of this project are **GPL-2.0-only**. The core code comes from [Zagitta/gpu-unlock](https://github.com/Zagitta/gpu-unlock/tree/0ebdb1c6308b6a2072be5bf04513472942541956). The bundled EDK2 headers and related notices keep their own licenses.
+
+See [LICENSE](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md).
