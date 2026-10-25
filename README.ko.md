@@ -2,9 +2,24 @@
 
 [English](README.md) | [日本語](README.ja.md) | **한국어**
 
-MSI RTX 3080 10GB에서 검증한 Windows용 UEFI 연산 언락 실험입니다. USB로 UEFI 앱을 실행한 뒤, 재부팅 없이 Windows로 이어서 부팅합니다.
+MSI RTX 3080 10GB와 같은 계열의 12GB 카드(`220a` 프로필)에서 검증한 Windows용 UEFI 연산 언락 실험입니다. USB로 UEFI 앱을 실행한 뒤, 재부팅 없이 Windows로 이어서 부팅합니다.
 
 **지원 범위는 아래의 실험 환경입니다.** 다른 제조사의 RTX 3080이나 RTX 3090을 지원하는 범용 도구가 아닙니다. 장치·화면 경로·펌웨어 검사에 맞지 않으면 실행을 거부합니다.
+
+## 무엇이 빨라지고, 무엇이 빨라지지 않는가
+
+이 해제가 되살리는 것은 FP16 텐서 경로입니다. VRAM 대역, FP32 처리량, 양자화 커널은
+바뀌지 않습니다. 따라서 증가폭은 그 워크로드가 그 경로를 얼마나 지나가는지로 정해집니다.
+
+| 워크로드 | 증가 | 이유 |
+| --- | ---: | --- |
+| 조밀한 BF16 / FP16 GEMM | +70~86% | 텐서 경로가 클럭당 2배 |
+| TF32 GEMM | +80% | 같은 경로 |
+| llama.cpp prefill (IQ2 모델) | +8~11% | 행렬곱 대부분이 양자화 커널이라 패치 대상이 아님 |
+| llama.cpp 생성 | 0% | 메모리 대역 병목이고, 해제는 대역을 바꾸지 않음 |
+| FP32 GEMM | −0.6~+7% | 패치 대상이 아님. 폭은 클럭과 하네스 차이 |
+
+계측의 자세한 내용과 단서는 아래 각 절에 있습니다.
 
 ## USB로 사용하기
 
@@ -18,6 +33,7 @@ USB 템플릿에는 EFI, 소스, 사용법과 라이선스가 들어 있습니�
 ## 확인한 환경
 
 - MSI RTX 3080 10GB: PCI `10de:2206`, subsystem `1462:3890`, VBIOS `94.02.59.00.aa`.
+- MSI RTX 3080 12GB: PCI `10de:220a`, subsystem `1462:3896`, 12288MiB, PROM SHA256 `799d147b…`. preflight와 본 transaction 1회만.
 - ASUS TUF GAMING B660M-PLUS D4, Intel i5-13600K / UHD 770 화면 출력.
 - Windows 11 Pro build 26200, NVIDIA 610.60 드라이버.
 - v0.10 실제 실행: UEFI transaction과 정리 완료 후 Windows CUDA 측정.

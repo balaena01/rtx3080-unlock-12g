@@ -2,9 +2,23 @@
 
 **English** | [日本語](README.ja.md) | [한국어](README.ko.md)
 
-A UEFI compute-unlock experiment for Windows, validated on an MSI RTX 3080 10GB. A UEFI application runs from a USB stick and then hands control straight back to Windows Boot Manager, without a reboot in between.
+A UEFI compute-unlock experiment for Windows, validated on an MSI RTX 3080 10GB and, in the 12GB (`220a`) profile, on a 12GB card of the same family. A UEFI application runs from a USB stick and then hands control straight back to Windows Boot Manager, without a reboot in between.
 
 **The supported scope is only the experimental environment listed below.** This is not a general-purpose tool for RTX 3080 cards from other vendors, nor for the RTX 3090. If the device, the display path or the firmware checks do not match, the application refuses to run.
+
+## What gets faster, and what does not
+
+The unlock restores the FP16 tensor path. It does not change VRAM bandwidth, FP32 throughput or the quantized kernels, so the gain depends entirely on how much of a workload goes through that path.
+
+| Workload | Change | Why |
+| --- | ---: | --- |
+| Dense BF16 / FP16 GEMM | +70–86% | Tensor path doubles per clock |
+| TF32 GEMM | +80% | Same path |
+| llama.cpp prefill, IQ2 model | +8–11% | Most matmuls run through the quantized kernels, which are not patched |
+| llama.cpp generation | 0% | Bound by memory bandwidth, which the unlock does not change |
+| FP32 GEMM | −0.6% to +7% | Not a patched path; the spread is clock and harness variation |
+
+Measurements and their caveats are in the sections below.
 
 ## Running it from USB
 
@@ -18,6 +32,7 @@ The USB template contains the EFI application, the sources, usage notes and lice
 ## Tested environment
 
 - MSI RTX 3080 10GB: PCI `10de:2206`, subsystem `1462:3890`, VBIOS `94.02.59.00.aa`.
+- MSI RTX 3080 12GB: PCI `10de:220a`, subsystem `1462:3896`, 12288 MiB, PROM SHA256 `799d147b…`. Preflight and one transaction run only.
 - ASUS TUF GAMING B660M-PLUS D4, Intel i5-13600K / UHD 770 for display output.
 - Windows 11 Pro build 26200, NVIDIA 610.60 driver.
 - v0.10 real run: UEFI transaction and cleanup completed, then CUDA measurements on the Windows side.
