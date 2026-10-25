@@ -8,7 +8,7 @@ MSI RTX 3080 10GB에서 검증한 Windows용 UEFI 연산 언락 실험입니다.
 
 ## USB로 사용하기
 
-1. [USB 준비 및 부팅 안내](docs/USB-BOOT.md)에 따라 FAT32 USB와 필요한 파일을 준비합니다.
+1. [USB 준비 및 부팅 안내](docs/USB-BOOT.ko.md)에 따라 FAT32 USB와 필요한 파일을 준비합니다.
 2. UEFI 부팅 메뉴에서 USB를 선택합니다.
 3. 사전 검사가 끝나 `READY`가 표시되면 **U를 한 번** 누릅니다.
 4. 성공 후 펌웨어 메뉴로 돌아오면 **Windows Boot Manager**를 선택합니다. 이 사이에 재부팅하지 않습니다.
@@ -34,6 +34,32 @@ USB 템플릿에는 EFI, 소스, 사용법과 라이선스가 들어 있습니�
 
 동일 실행 파일과 CUDA/cuBLAS 환경의 4096×4096 GEMM 측정입니다. 기준값은 한 프로세스, 적용 후 값은 세 프로세스 중앙값들의 중앙값입니다. 게임 성능, 모든 AI 작업의 향상률, 장시간 안정성이나 콜드부팅 후 지속성을 의미하지 않습니다. [측정 자료](results/benchmark.json)와 [실제 UEFI 실행 로그](evidence/unlock-boot-09/REPORT.TXT)를 함께 제공합니다. 측정 자료에서는 개인 경로와 장치 UUID를 제외했습니다.
 
+## PyTorch 계측 (matmul, FP32 누산)
+
+| 종류 | 해제 전 | 해제 후 | 증가 | SM 클럭 (전 → 후) |
+| --- | ---: | ---: | ---: | --- |
+| BF16 4096 | 58.6 | 101.0 | +72% | 1815 → 1530 MHz |
+| FP16 4096 | 57.4 | 97.7 | +70% | 1800 → 1485 MHz |
+| BF16 8192 | 61.4 | 112.7 | +84% | 1905 → 1643 MHz |
+| FP16 8192 | 60.5 | 109.6 | +81% | 1875 → 1605 MHz |
+| TF32 4096 | 28.3 | 51.1 | +80% | 1905 → 1635 MHz |
+| FP32 4096 (비교용) | 17.8 | 19.1 | +7% | 1515 → 1485 MHz |
+
+단위는 TFLOPS. PyTorch matmul(FP32 누산)을 해제 전과 해제 후에 같은 카드, 같은 하네스로
+측정했습니다. 원본 값은 [results/pytorch-matrix.json](results/pytorch-matrix.json)에 있습니다.
+
+SM 클럭으로 나눠 보면 무슨 일이 일어났는지가 보입니다.
+
+- BF16·FP16·TF32는 해제 후 **클럭당 ×2.0~2.1**(32.3 → 66.0, 31.9 → 65.8, 32.3 → 68.6,
+  32.3 → 68.3, 14.9 → 31.3 TFLOPS/GHz)입니다. 텐서 경로가 모두 2배가 되었고, 이는 반속
+  텐서 경로가 되살아났을 때의 모양 그대로입니다.
+- 실측 증가가 70~84%에 그치는 것은 해제 후 실행이 더 낮은 클럭에 자리잡기 때문입니다
+  (1815 → 1530 MHz 등). 클럭당 처리량은 2배가 되고 그 일부를 클럭이 되돌려 준 셈입니다.
+  클럭이 내려가는 이유 자체는 직접 측정하지 않았고, 소비전력 예산이 유력합니다.
+- FP32 4096은 클럭당 ×1.09입니다. FP32는 패치 대상 경로를 쓰지 않으므로 해제 효과가 아니라
+  클럭과 측정 편차로 읽어야 합니다. 위의 cuBLAS `fp32_pedantic`(−0.61%)과도 어긋나지만
+  이는 다른 하네스입니다.
+
 ## 빌드와 검사
 
 Windows 개발 환경: LLVM/clang 12 + lld-link(VS2019 BuildTools), MSVC 환경(VS2022 Community), Python 3.9 이상. 스크립트의 기본 도구 경로는 이 설치 구성을 기준으로 합니다.
@@ -43,7 +69,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\unlock\build.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\unlock\test-all.ps1
 ```
 
-빌드는 `unlock/build/BOOTX64.EFI`를 만들고 PE 형식을 검사합니다. 검사 명령은 GPU를 실행하지 않습니다. 추가 fixture를 사용하는 전체 모의 검사와 패키지 생성 방법은 [TESTING.md](TESTING.md)를 참고하세요.
+빌드는 `unlock/build/BOOTX64.EFI`를 만들고 PE 형식을 검사합니다. 검사 명령은 GPU를 실행하지 않습니다. 추가 fixture를 사용하는 전체 모의 검사와 패키지 생성 방법은 [TESTING.ko.md](TESTING.ko.md)를 참고하세요.
 
 ## 12GB(220a) 프로필과 리드온리 preflight
 

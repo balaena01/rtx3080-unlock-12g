@@ -30,12 +30,28 @@
       "sha256": "c83f0e32786652a67625fb0770db09ee46fe1ebefba4790600a5ffce52dbde1d"
     },
     {
+      "path": "README.ja.md",
+      "sha256": "c0b2e2ffd0c3b7c2bc5320cbf82b0f12778b831e7853044a23fd14e9bb39f051"
+    },
+    {
+      "path": "README.ko.md",
+      "sha256": "5837334323b03202a3f7322f787c7c71bf8b1acc97b7cbf5705b9590ed8ef2d3"
+    },
+    {
       "path": "README.md",
-      "sha256": "7962625c637ed4e116f83ae9240e93f7f2e80beb5a5660c37fa06ae122c72914"
+      "sha256": "a353dc6606ba98107db36bd403d3707f78d211a35a0f26704b1771e5398d9f50"
+    },
+    {
+      "path": "TESTING.ja.md",
+      "sha256": "95064a34d660e7c8c8f8bf00a59c3c10abc9eb2293f240f7ad06ed812d1fac92"
+    },
+    {
+      "path": "TESTING.ko.md",
+      "sha256": "49c27bfe57a109badf09c48d91cd3ffe0a45c577f73faae34bb33353d0237933"
     },
     {
       "path": "TESTING.md",
-      "sha256": "dc19b557eb44aa742ba0480cea942cc38d11ca56711ae628d2142d9c0ea93eb1"
+      "sha256": "d247a8107196c1ec4f756678ac86fa4a35906f94c9663690e0b138c605a52363"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -2618,8 +2634,16 @@
       "sha256": "20b43822b0737cbd0f692ad8200cba4cfc47c192431827a98056c8a0068efb19"
     },
     {
+      "path": "docs/USB-BOOT.ja.md",
+      "sha256": "5d885524cc9cc55b0283778600fafd6d6f645192eb7573c548cc05ba627e9254"
+    },
+    {
+      "path": "docs/USB-BOOT.ko.md",
+      "sha256": "01ea59ecaebd7882f551a364ae0a3507c2e5eb501ed36121fd47ad147680d08f"
+    },
+    {
       "path": "docs/USB-BOOT.md",
-      "sha256": "ef40402eebd5c4b28da521de6b230747821f002fdccbde178f89c2da4eb6e93b"
+      "sha256": "89601d73d51ac2b88a1fb08e18638a46be021253c62090c5ed8f101ed43ebe89"
     },
     {
       "path": "efi_runtime.c",
@@ -2634,8 +2658,12 @@
       "sha256": "61996fd7bb47bdec6ffa0fd9aafed27e5e8ee4c337afb4cb0df003678c458ec9"
     },
     {
+      "path": "preflight-linux.sh",
+      "sha256": "2f90d54e791638d60348c5ef794b709510a6867b861f8cf8fa6cbf9b5045a9de"
+    },
+    {
       "path": "probe_app.c",
-      "sha256": "db0f90566b756757de7ce213fd6ee9dbeb736586f2e1e489375dae752bd2ec5e"
+      "sha256": "067f7207974874d6b5d5efa87fc8199347cf821b23134c28d4b3a046ad802337"
     },
     {
       "path": "probe_core.c",
@@ -2648,6 +2676,10 @@
     {
       "path": "results/benchmark.json",
       "sha256": "11681321992649cb2b2aab0c53044246b7b7a80b77c19cc397ad16cdc8c1889f"
+    },
+    {
+      "path": "results/pytorch-matrix.json",
+      "sha256": "aec76cb132a7c5fee0ac5298492efac6e0c7144c468a20348ead6f08d11245f6"
     },
     {
       "path": "test.cmd",
@@ -2679,7 +2711,7 @@
     },
     {
       "path": "unlock/app.c",
-      "sha256": "6a49bba0bb89f8628daa9831ac6317d320623de9bdc0ad9c3c04ffb6dcae6820"
+      "sha256": "d1b1518ea2b501e89d4d38cba1bb900006d9ccd885bd07e5e6ec2908589416c7"
     },
     {
       "path": "unlock/app.h",
@@ -2687,7 +2719,7 @@
     },
     {
       "path": "unlock/app_io.c",
-      "sha256": "c4c82b3c054c267fa9b295c63898aa5d2147fbc89524708f16cd71c206ecead2"
+      "sha256": "b277abaaaace10bea96508682785231b34df31cd4546df2bd1beba6532f77fa8"
     },
     {
       "path": "unlock/app_io.h",
@@ -2791,7 +2823,7 @@
     },
     {
       "path": "unlock/port.h",
-      "sha256": "72355c90f27481edf47f3e1c758ba91eb33f4dfcdc616eba4043a3bff20a5d5e"
+      "sha256": "24fad5599ea8548936b29c786117068b8ccd48967cc2608cc68c63d109601779"
     },
     {
       "path": "unlock/runtime.c",

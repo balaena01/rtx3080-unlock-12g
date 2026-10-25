@@ -34,6 +34,25 @@ The current code also checks BDF `0000:01:00.0`, BARs, the board PROM and the In
 
 These are 4096×4096 GEMM measurements taken with the same executable and the same CUDA/cuBLAS environment. The baseline is a single process; the post-unlock value is the median of three process medians. They do not imply game performance, the speedup of every AI workload, long-run stability, or persistence across a cold boot. [Measurement data](results/benchmark.json) and the [real UEFI run log](evidence/unlock-boot-09/REPORT.TXT) are included. Personal paths and device UUIDs were removed from the measurement data.
 
+## PyTorch measurements (matmul, FP32 accumulate)
+
+| Kind | Before | After | Change | SM clock (before → after) |
+| --- | ---: | ---: | ---: | --- |
+| BF16 4096 | 58.6 | 101.0 | +72% | 1815 → 1530 MHz |
+| FP16 4096 | 57.4 | 97.7 | +70% | 1800 → 1485 MHz |
+| BF16 8192 | 61.4 | 112.7 | +84% | 1905 → 1643 MHz |
+| FP16 8192 | 60.5 | 109.6 | +81% | 1875 → 1605 MHz |
+| TF32 4096 | 28.3 | 51.1 | +80% | 1905 → 1635 MHz |
+| FP32 4096 (reference) | 17.8 | 19.1 | +7% | 1515 → 1485 MHz |
+
+TFLOPS, PyTorch matmul with FP32 accumulation, same card and same harness before and after the unlock. Raw values are in [results/pytorch-matrix.json](results/pytorch-matrix.json).
+
+Normalising by the SM clock makes the mechanism visible:
+
+- BF16, FP16 and TF32 reach **×2.0–2.1 TFLOPS per clock** after the unlock (32.3 → 66.0, 31.9 → 65.8, 32.3 → 68.6, 32.3 → 68.3, 14.9 → 31.3 TFLOPS/GHz). All tensor paths double per clock, which is what restoring a half-rate tensor path looks like.
+- The absolute gain is only 70–84% because the unlocked runs settle at lower clocks (1815 → 1530 MHz, and so on). The per-clock throughput doubled and the clock gave part of it back. The reason for the lower clocks has not been measured directly; the power budget is the plausible explanation.
+- FP32 at 4096 moves ×1.09 per clock. FP32 does not use the patched path, so read it as clock and measurement variation rather than an unlock effect. It also disagrees with the cuBLAS `fp32_pedantic` run above (−0.61%), which is a different harness.
+
 ## Build and test
 
 Windows development environment: LLVM/clang 12 + lld-link (VS2019 BuildTools), an MSVC environment (VS2022 Community), Python 3.9 or newer. The default tool paths in the scripts assume this installation.
